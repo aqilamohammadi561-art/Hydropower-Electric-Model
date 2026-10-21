@@ -1,0 +1,1085 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hydropower Electric Model</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+      body {
+        font-family: "Inter", sans-serif;
+        overflow: hidden;
+        background-color: #080c14;
+        color: #e2e8f0;
+        user-select: none;
+      }
+      .font-mono {
+        font-family: "JetBrains Mono", monospace;
+      }
+      .glass-panel {
+        background: rgba(15, 23, 42, 0.85);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+      }
+      .glass-modal {
+        background: rgba(15, 23, 42, 0.95);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(56, 189, 248, 0.25);
+      }
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 5px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: rgba(15, 23, 42, 0.6);
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: rgba(56, 189, 248, 0.4);
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body
+    class="w-screen h-screen m-0 p-0 overflow-hidden select-none bg-slate-950"
+  >
+    <div id="canvas-container" class="w-full h-full absolute inset-0 z-0"></div>
+
+    <!-- PURE TITLE HEADER (Top-Left) -->
+    <header class="absolute top-5 left-5 z-10 pointer-events-none">
+      <div
+        class="glass-panel px-4 py-2.5 rounded-2xl flex items-center gap-3 pointer-events-auto shadow-2xl border-cyan-500/30"
+      >
+        <div
+          class="w-8 h-8 rounded-xl bg-gradient-to-tr from-cyan-500 to-amber-500 flex items-center justify-center text-white text-sm font-black shadow-lg shadow-cyan-500/20"
+        >
+          <i class="fa-solid fa-bolt"></i>
+        </div>
+        <h1 class="text-sm font-extrabold text-white tracking-wide">
+          Hydropower Electric Model
+        </h1>
+      </div>
+    </header>
+
+    <!-- TELEMETRY MICRO-PILL (Top-Right) -->
+    <div class="absolute top-5 right-20 z-10 pointer-events-none">
+      <div
+        class="glass-panel px-4 py-2 rounded-full pointer-events-auto shadow-2xl flex items-center gap-3 border-slate-700/60 text-xs"
+      >
+        <div class="flex items-center gap-1.5">
+          <div class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></div>
+          <span class="text-slate-400">Power:</span>
+          <span id="hud-power" class="font-mono font-bold text-cyan-300"
+            >124.5 MW</span
+          >
+        </div>
+        <div class="h-3.5 w-[1px] bg-slate-700"></div>
+        <div class="flex items-center gap-1.5">
+          <span class="text-slate-400">Turbine:</span>
+          <span id="hud-rpm" class="font-mono font-bold text-amber-300"
+            >300 RPM</span
+          >
+        </div>
+        <div class="h-3.5 w-[1px] bg-slate-700"></div>
+        <div class="flex items-center gap-1.5">
+          <span class="text-slate-400">BESS:</span>
+          <span id="hud-battery" class="font-mono font-bold text-emerald-300"
+            >88.4%</span
+          >
+        </div>
+        <div class="h-3.5 w-[1px] bg-slate-700"></div>
+        <div class="flex items-center gap-1.5">
+          <span class="text-slate-400">Flow:</span>
+          <span id="hud-flow" class="font-mono font-bold text-blue-300"
+            >4,250 L/s</span
+          >
+        </div>
+      </div>
+    </div>
+
+    <!-- SETTINGS BUTTON (Top-Right Icon) -->
+    <div class="absolute top-5 right-5 z-10 pointer-events-auto">
+      <button
+        onclick="toggleSettingsModal()"
+        class="w-10 h-10 rounded-2xl glass-panel flex items-center justify-center text-amber-400 hover:text-white hover:bg-slate-800/80 transition-all shadow-xl border-amber-500/40 group"
+      >
+        <i
+          class="fa-solid fa-gear text-lg group-hover:rotate-90 transition-transform duration-300"
+        ></i>
+      </button>
+    </div>
+
+    <!-- VERTICAL CAMERA FOCUS SIDEBAR (Middle-Left) -->
+    <div class="absolute top-24 left-5 z-10 pointer-events-auto">
+      <div
+        class="glass-panel p-2 rounded-2xl shadow-2xl border-cyan-500/20 flex flex-col gap-2"
+      >
+        <span
+          class="text-[9px] font-bold text-slate-400 uppercase tracking-widest text-center px-1"
+          >Focus</span
+        >
+        <button
+          onclick="focusView('overview')"
+          title="Overview"
+          class="w-10 h-10 rounded-xl bg-slate-800/80 hover:bg-cyan-500/20 hover:text-cyan-300 text-slate-300 flex items-center justify-center transition border border-slate-700/60 shadow-md"
+        >
+          <i class="fa-solid fa-globe text-xs"></i>
+        </button>
+        <button
+          onclick="focusView('reservoir')"
+          title="Reservoir"
+          class="w-10 h-10 rounded-xl bg-slate-800/80 hover:bg-blue-500/20 hover:text-blue-300 text-slate-300 flex items-center justify-center transition border border-slate-700/60 shadow-md"
+        >
+          <i class="fa-solid fa-water text-xs"></i>
+        </button>
+        <button
+          onclick="focusView('turbine')"
+          title="Circular Turbine Runner"
+          class="w-10 h-10 rounded-xl bg-slate-800/80 hover:bg-emerald-500/20 hover:text-emerald-300 text-slate-300 flex items-center justify-center transition border border-slate-700/60 shadow-md"
+        >
+          <i class="fa-solid fa-arrows-spin text-xs"></i>
+        </button>
+        <button
+          onclick="focusView('generator')"
+          title="Generator & Bus"
+          class="w-10 h-10 rounded-xl bg-slate-800/80 hover:bg-amber-500/20 hover:text-amber-300 text-slate-300 flex items-center justify-center transition border border-slate-700/60 shadow-md"
+        >
+          <i class="fa-solid fa-bolt text-xs"></i>
+        </button>
+        <button
+          onclick="focusView('battery')"
+          title="Battery BESS"
+          class="w-10 h-10 rounded-xl bg-slate-800/80 hover:bg-indigo-500/20 hover:text-indigo-300 text-slate-300 flex items-center justify-center transition border border-slate-700/60 shadow-md"
+        >
+          <i class="fa-solid fa-car-battery text-xs"></i>
+        </button>
+        <button
+          onclick="focusView('tailrace')"
+          title="Real Tailrace River"
+          class="w-10 h-10 rounded-xl bg-slate-800/80 hover:bg-teal-500/20 hover:text-teal-300 text-slate-300 flex items-center justify-center transition border border-slate-700/60 shadow-md"
+        >
+          <i class="fa-solid fa-water text-xs"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- SETTINGS DRAWER -->
+    <div
+      id="settings-modal"
+      class="hidden absolute top-16 right-5 z-30 pointer-events-auto"
+    >
+      <div
+        class="glass-modal p-5 rounded-3xl shadow-2xl max-w-xs w-80 border border-slate-700/80 space-y-4 max-h-[85vh] overflow-y-auto custom-scrollbar"
+      >
+        <div
+          class="flex items-center justify-between pb-2.5 border-b border-slate-700"
+        >
+          <h2
+            class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2"
+          >
+            <i class="fa-solid fa-sliders text-amber-400"></i> Plant Settings &
+            View
+          </h2>
+          <button
+            onclick="toggleSettingsModal()"
+            class="w-6 h-6 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition text-xs"
+          >
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        <!-- INTERACTIVE INFO TAGS TOGGLE -->
+        <div
+          class="flex items-center justify-between py-1 border-b border-slate-700/80"
+        >
+          <span
+            class="text-xs text-slate-200 font-medium flex items-center gap-1.5"
+          >
+            <i class="fa-solid fa-circle-info text-cyan-400"></i> Interactive
+            Info Tags
+          </span>
+          <button
+            id="btn-infotags"
+            onclick="toggleInfoTags()"
+            class="px-2.5 py-1 rounded-full text-xs font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/30 transition"
+          >
+            ON
+          </button>
+        </div>
+
+        <!-- PLANT PARAMETER SLIDERS -->
+        <div class="pt-2 border-t border-slate-700/80 space-y-3">
+          <label
+            class="text-[11px] font-bold text-slate-300 uppercase tracking-wider block"
+          >
+            <i class="fa-solid fa-gauge-high text-amber-400 mr-1"></i>
+            Simulation Parameters
+          </label>
+
+          <!-- Intake Gate Slider -->
+          <div class="space-y-1">
+            <div class="flex justify-between text-xs">
+              <span class="text-slate-300">Intake Gate</span>
+              <span id="val-gate" class="font-mono text-cyan-400 font-bold"
+                >85%</span
+              >
+            </div>
+            <input
+              id="slider-gate"
+              type="range"
+              min="0"
+              max="100"
+              value="85"
+              class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+              oninput="updateSimulationParams()"
+            />
+          </div>
+
+          <!-- Flow Velocity Slider -->
+          <div class="space-y-1">
+            <div class="flex justify-between text-xs">
+              <span class="text-slate-300">Flow Velocity</span>
+              <span id="val-flow" class="font-mono text-blue-400 font-bold"
+                >4,250 L/s</span
+              >
+            </div>
+            <input
+              id="slider-flow"
+              type="range"
+              min="10"
+              max="100"
+              value="85"
+              class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-400"
+              oninput="updateSimulationParams()"
+            />
+          </div>
+
+          <!-- Grid Load Slider -->
+          <div class="space-y-1">
+            <div class="flex justify-between text-xs">
+              <span class="text-slate-300">Grid Load</span>
+              <span id="val-load" class="font-mono text-amber-400 font-bold"
+                >110 MW</span
+              >
+            </div>
+            <input
+              id="slider-load"
+              type="range"
+              min="0"
+              max="150"
+              value="110"
+              class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-400"
+              oninput="updateSimulationParams()"
+            />
+          </div>
+        </div>
+
+        <!-- WALL OPACITY CUTAWAY SLIDER -->
+        <div class="pt-2 border-t border-slate-700/80 space-y-2">
+          <div class="flex justify-between items-center text-xs">
+            <span class="font-bold text-slate-200 flex items-center gap-1">
+              <i class="fa-solid fa-eye text-cyan-400"></i> Cutaway Opacity
+            </span>
+            <span id="lbl-opacity" class="font-mono font-bold text-amber-400"
+              >100% (Solid)</span
+            >
+          </div>
+          <input
+            id="slider-opacity"
+            type="range"
+            min="15"
+            max="100"
+            value="100"
+            class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-400"
+            oninput="updateWallOpacity()"
+          />
+        </div>
+
+        <!-- Streamline Particle FX Toggle -->
+        <div
+          class="flex items-center justify-between pt-2 border-t border-slate-700/80"
+        >
+          <span class="text-xs text-slate-300">Particle Energy FX</span>
+          <button
+            id="btn-particles"
+            onclick="toggleParticles()"
+            class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/30 transition"
+          >
+            ON
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- COMPONENT INFO CARD OVERLAY -->
+    <div
+      id="component-card"
+      class="hidden absolute bottom-6 left-1/2 -translate-x-1/2 z-20 glass-panel p-4 rounded-2xl shadow-2xl border border-cyan-500/40 max-w-sm w-full transition-all"
+    >
+      <div class="flex items-start justify-between mb-2">
+        <div class="flex items-center gap-2.5">
+          <div
+            id="comp-icon"
+            class="w-8 h-8 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-xs font-bold border border-cyan-500/40"
+          >
+            1
+          </div>
+          <div>
+            <h3 id="comp-title" class="text-xs font-bold text-white">
+              Component Name
+            </h3>
+            <p id="comp-sub" class="text-[10px] text-cyan-300 font-mono">
+              Hydro Subsystem
+            </p>
+          </div>
+        </div>
+        <button
+          onclick="closeComponentCard()"
+          class="text-slate-400 hover:text-white text-xs p-1"
+        >
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <p id="comp-desc" class="text-xs text-slate-300 leading-relaxed mb-2.5">
+        Description text.
+      </p>
+      <div
+        class="flex items-center justify-between text-[11px] font-mono bg-slate-900/90 px-3 py-1.5 rounded-xl border border-slate-700/60"
+      >
+        <span id="comp-tag1" class="text-slate-300">Status: Active</span>
+        <span id="comp-tag2" class="text-emerald-400 font-bold"
+          >100% Efficiency</span
+        >
+      </div>
+    </div>
+
+    <!-- THREE.JS APPLICATION CODE -->
+    <script>
+      let scene, camera, renderer, controls, raycaster, mouse;
+      let turbineGroup, shaftMesh, generatorRotor, statorCoils;
+      let waterFlowParticles, electricFlowParticles, tailraceFlowParticles;
+      let powerhouseExteriorMesh, powerhouseWallMaterial;
+
+      // Simulation State Parameters
+      let gateOpening = 0.85;
+      let flowVelocity = 0.85;
+      let gridLoad = 110;
+      let turbineRPM = 300;
+      let generatedPower = 124.5;
+      let batteryCharge = 88.4;
+      let wallOpacity = 1.0;
+      let showParticles = true;
+      let showInfoTags = true;
+
+      const clickableObjects = [];
+
+      const componentData = {
+        overview: {
+          num: "0",
+          title: "Hydropower Electric Model Overview",
+          sub: "Complete Renewable Generation System",
+          desc: "A complete hydraulic and electrical generation facility featuring circular Francis turbine runner, synchronous generator, electric power bus to battery storage, and natural river tailrace.",
+          tag1: "System: Fully Operational",
+          tag2: "Efficiency: 96.8%",
+          camPos: [42, 26, 50],
+          camLook: [0, 4, 0],
+        },
+        reservoir: {
+          num: "1",
+          title: "Water Reservoir & Intake Gate",
+          sub: "High Elevation Potential Energy",
+          desc: "Large upper water reservoir holding high-pressure water channeled down towards the circular turbine runner.",
+          tag1: "Head Elevation: 120m",
+          tag2: "Volume: 12.5M m³",
+          camPos: [-32, 22, 35],
+          camLook: [-25, 10, 0],
+        },
+        turbine: {
+          num: "2",
+          title: "Horizontal Circular Turbine Runner",
+          sub: "Precision Radial Hydro Blades",
+          desc: "Circular, radially symmetric hydro turbine runner with precision curved blades spinning smoothly around the central vertical shaft.",
+          tag1: "Rotation: 300 RPM",
+          tag2: "Flow: 4,250 L/s",
+          camPos: [-4, 8, 16],
+          camLook: [-2, 2, 0],
+        },
+        generator: {
+          num: "3",
+          title: "Synchronous Generator & Power Bus",
+          sub: "Electromechanical Energy Conversion",
+          desc: "Converts mechanical rotation from the turbine into 18.5 kV electricity. Glowing yellow energy particles flow continuously over connecting bus lines straight into the battery storage bank.",
+          tag1: "Voltage: 18.5 kV",
+          tag2: "Frequency: 60 Hz",
+          camPos: [-2, 18, 16],
+          camLook: [-2, 11, 0],
+        },
+        battery: {
+          num: "4",
+          title: "Battery Energy Storage (BESS)",
+          sub: "Grid-Scale Chemical Storage",
+          desc: "Cobalt blue battery container racks directly wired to receive surplus renewable electricity generated by the hydro plant.",
+          tag1: "Capacity: 250 MWh",
+          tag2: "SOC: 88.4%",
+          camPos: [22, 10, 14],
+          camLook: [11, 3, 0],
+        },
+        tailrace: {
+          num: "5",
+          title: "Natural Tailrace River Channel",
+          sub: "Eco-Friendly Downstream Discharge",
+          desc: "Wide natural stone embankment river channel cleanly and calmly discharging spent water downstream.",
+          tag1: "Discharge: River Basin",
+          tag2: "Velocity: 1.8 m/s",
+          camPos: [18, 8, 25],
+          camLook: [12, -2, 0],
+        },
+      };
+
+      window.toggleSettingsModal = function () {
+        const modal = document.getElementById("settings-modal");
+        if (modal) modal.classList.toggle("hidden");
+      };
+
+      window.toggleInfoTags = function () {
+        showInfoTags = !showInfoTags;
+        const btn = document.getElementById("btn-infotags");
+        if (btn) {
+          btn.textContent = showInfoTags ? "ON" : "OFF";
+          btn.className = showInfoTags
+            ? "px-2.5 py-1 rounded-full text-xs font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/30 transition"
+            : "px-2.5 py-1 rounded-full text-xs font-bold bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700 transition";
+        }
+        if (!showInfoTags) window.closeComponentCard();
+      };
+
+      window.toggleParticles = function () {
+        showParticles = !showParticles;
+        const btn = document.getElementById("btn-particles");
+        if (btn) {
+          btn.textContent = showParticles ? "ON" : "OFF";
+          btn.className = showParticles
+            ? "px-2.5 py-0.5 rounded-full text-xs font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/30 transition"
+            : "px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700 transition";
+        }
+        if (waterFlowParticles) waterFlowParticles.visible = showParticles;
+        if (electricFlowParticles)
+          electricFlowParticles.visible = showParticles;
+        if (tailraceFlowParticles)
+          tailraceFlowParticles.visible = showParticles;
+      };
+
+      window.focusView = function (key) {
+        const data = componentData[key];
+        if (!data) return;
+
+        const targetPos = new THREE.Vector3(...data.camPos);
+        const targetLook = new THREE.Vector3(...data.camLook);
+
+        const startPos = camera.position.clone();
+        const startLook = controls.target.clone();
+
+        let duration = 1000;
+        let startTime = performance.now();
+
+        function animateCam(time) {
+          let elapsed = time - startTime;
+          let progress = Math.min(elapsed / duration, 1);
+          let ease = progress * (2 - progress);
+
+          camera.position.lerpVectors(startPos, targetPos, ease);
+          controls.target.lerpVectors(startLook, targetLook, ease);
+          controls.update();
+
+          if (progress < 1) {
+            requestAnimationFrame(animateCam);
+          } else if (showInfoTags) {
+            showComponentCard(key);
+          }
+        }
+        requestAnimationFrame(animateCam);
+      };
+
+      window.updateSimulationParams = function () {
+        const gateVal = parseInt(document.getElementById("slider-gate").value);
+        const flowVal = parseInt(document.getElementById("slider-flow").value);
+        const loadVal = parseInt(document.getElementById("slider-load").value);
+
+        gateOpening = gateVal / 100;
+        flowVelocity = flowVal / 100;
+        gridLoad = loadVal;
+
+        let flowRateLps = Math.round(5000 * gateOpening * flowVelocity);
+        turbineRPM = Math.round(350 * gateOpening * flowVelocity);
+        generatedPower = parseFloat(
+          (150 * gateOpening * flowVelocity * 0.95).toFixed(1),
+        );
+        batteryCharge = Math.min(
+          100,
+          Math.max(
+            0,
+            parseFloat((80 + (generatedPower - gridLoad) * 0.1).toFixed(1)),
+          ),
+        );
+
+        document.getElementById("val-gate").textContent = `${gateVal}%`;
+        document.getElementById("val-flow").textContent =
+          `${flowRateLps.toLocaleString()} L/s`;
+        document.getElementById("val-load").textContent = `${loadVal} MW`;
+
+        document.getElementById("hud-power").textContent =
+          `${generatedPower} MW`;
+        document.getElementById("hud-rpm").textContent = `${turbineRPM} RPM`;
+        document.getElementById("hud-battery").textContent =
+          `${batteryCharge}%`;
+        document.getElementById("hud-flow").textContent =
+          `${flowRateLps.toLocaleString()} L/s`;
+      };
+
+      window.updateWallOpacity = function () {
+        const opacityVal = parseInt(
+          document.getElementById("slider-opacity").value,
+        );
+        wallOpacity = opacityVal / 100;
+
+        const lbl = document.getElementById("lbl-opacity");
+        if (lbl) {
+          if (opacityVal === 100) lbl.textContent = "100% (Solid)";
+          else if (opacityVal < 30) lbl.textContent = `${opacityVal}% (Glass)`;
+          else lbl.textContent = `${opacityVal}% (Translucent)`;
+        }
+
+        if (powerhouseWallMaterial) {
+          powerhouseWallMaterial.opacity = wallOpacity;
+          powerhouseWallMaterial.transparent = wallOpacity < 1.0;
+          powerhouseWallMaterial.needsUpdate = true;
+        }
+      };
+
+      function showComponentCard(key) {
+        const data = componentData[key];
+        if (!data) return;
+
+        document.getElementById("comp-icon").textContent = data.num;
+        document.getElementById("comp-title").textContent = data.title;
+        document.getElementById("comp-sub").textContent = data.sub;
+        document.getElementById("comp-desc").textContent = data.desc;
+        document.getElementById("comp-tag1").textContent = data.tag1;
+        document.getElementById("comp-tag2").textContent = data.tag2;
+
+        document.getElementById("component-card").classList.remove("hidden");
+      }
+
+      window.closeComponentCard = function () {
+        const card = document.getElementById("component-card");
+        if (card) card.classList.add("hidden");
+      };
+
+      function onDocumentPointerDown(event) {
+        if (!showInfoTags) return;
+
+        mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+        mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+        raycaster.setFromCamera(mouse, camera);
+        const intersects = raycaster.intersectObjects(clickableObjects, true);
+
+        if (intersects.length > 0) {
+          let obj = intersects[0].object;
+          while (obj && (!obj.userData || !obj.userData.key) && obj.parent) {
+            obj = obj.parent;
+          }
+          if (obj && obj.userData && obj.userData.key) {
+            showComponentCard(obj.userData.key);
+          }
+        }
+      }
+
+      window.onload = function () {
+        initThreeJS();
+        buildTextures();
+        buildEnvironment();
+        buildHydroPlant();
+        updateSimulationParams();
+        animate();
+      };
+
+      let damTexture, powerhouseTexture;
+
+      function buildTextures() {
+        const canvasDam = document.createElement("canvas");
+        canvasDam.width = 512;
+        canvasDam.height = 512;
+        const ctxDam = canvasDam.getContext("2d");
+        ctxDam.fillStyle = "#c2b299";
+        ctxDam.fillRect(0, 0, 512, 512);
+        ctxDam.strokeStyle = "#9e8e76";
+        ctxDam.lineWidth = 4;
+        for (let y = 0; y < 512; y += 64) {
+          ctxDam.beginPath();
+          ctxDam.moveTo(0, y);
+          ctxDam.lineTo(512, y);
+          ctxDam.stroke();
+        }
+        damTexture = new THREE.CanvasTexture(canvasDam);
+        damTexture.wrapS = THREE.RepeatWrapping;
+        damTexture.wrapT = THREE.RepeatWrapping;
+        damTexture.repeat.set(2, 4);
+
+        const canvasPH = document.createElement("canvas");
+        canvasPH.width = 256;
+        canvasPH.height = 256;
+        const ctxPH = canvasPH.getContext("2d");
+        ctxPH.fillStyle = "#f8fafc";
+        ctxPH.fillRect(0, 0, 256, 256);
+        ctxPH.strokeStyle = "#cbd5e1";
+        ctxPH.lineWidth = 2;
+        for (let i = 0; i <= 256; i += 32) ctxPH.strokeRect(i, 0, 32, 256);
+        powerhouseTexture = new THREE.CanvasTexture(canvasPH);
+        powerhouseTexture.wrapS = THREE.RepeatWrapping;
+        powerhouseTexture.wrapT = THREE.RepeatWrapping;
+        powerhouseTexture.repeat.set(4, 2);
+      }
+
+      function initThreeJS() {
+        const container = document.getElementById("canvas-container");
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x080c14);
+        scene.fog = new THREE.FogExp2(0x080c14, 0.003);
+
+        camera = new THREE.PerspectiveCamera(
+          45,
+          window.innerWidth / window.innerHeight,
+          0.1,
+          1000,
+        );
+        camera.position.set(42, 26, 50);
+
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.35;
+        container.appendChild(renderer.domElement);
+
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxPolarAngle = Math.PI / 2 + 0.02;
+        controls.target.set(0, 4, 0);
+
+        raycaster = new THREE.Raycaster();
+        mouse = new THREE.Vector2();
+
+        const hemiLight = new THREE.HemisphereLight(0xfff7ed, 0x334155, 1.5);
+        scene.add(hemiLight);
+
+        const sunLight = new THREE.DirectionalLight(0xffedd5, 2.2);
+        sunLight.position.set(50, 70, 40);
+        sunLight.castShadow = true;
+        scene.add(sunLight);
+
+        window.addEventListener("resize", onWindowResize);
+        window.addEventListener("pointerdown", onDocumentPointerDown);
+      }
+
+      function buildEnvironment() {
+        const terrainGeo = new THREE.PlaneGeometry(200, 200, 40, 40);
+        terrainGeo.rotateX(-Math.PI / 2);
+        const pos = terrainGeo.attributes.position;
+        for (let i = 0; i < pos.count; i++) {
+          let x = pos.getX(i);
+          let z = pos.getZ(i);
+          let dist = Math.abs(z);
+          let y =
+            x < -10
+              ? 12 + Math.sin(x * 0.08) * 3
+              : -2.5 + (dist > 16 ? Math.pow(dist - 16, 1.2) * 0.35 : 0);
+          pos.setY(i, y);
+        }
+        terrainGeo.computeVertexNormals();
+        const terrain = new THREE.Mesh(
+          terrainGeo,
+          new THREE.MeshStandardMaterial({
+            color: 0x1e3a29,
+            roughness: 0.85,
+            flatShading: true,
+          }),
+        );
+        terrain.position.y = -6;
+        terrain.receiveShadow = true;
+        scene.add(terrain);
+      }
+
+      function buildHydroPlant() {
+        const damSolidMaterial = new THREE.MeshStandardMaterial({
+          color: 0xd4c4a8,
+          roughness: 0.7,
+          map: damTexture,
+        });
+        powerhouseWallMaterial = new THREE.MeshStandardMaterial({
+          color: 0xf8fafc,
+          roughness: 0.4,
+          map: powerhouseTexture,
+        });
+
+        const damGroup = new THREE.Group();
+        const damMesh = new THREE.Mesh(
+          new THREE.BoxGeometry(10, 24, 50),
+          damSolidMaterial,
+        );
+        damMesh.position.set(-25, 4, 0);
+        damMesh.userData = { key: "reservoir" };
+        damGroup.add(damMesh);
+        clickableObjects.push(damMesh);
+
+        const reservoirWater = new THREE.Mesh(
+          new THREE.BoxGeometry(35, 16, 48),
+          new THREE.MeshPhysicalMaterial({
+            color: 0x0284c7,
+            transparent: true,
+            opacity: 0.75,
+            roughness: 0.1,
+          }),
+        );
+        reservoirWater.position.set(-43, 6, 0);
+        scene.add(reservoirWater);
+        scene.add(damGroup);
+
+        const waterCount = 50;
+        const waterGeo = new THREE.BufferGeometry();
+        const waterPos = new Float32Array(waterCount * 3);
+        const waterVels = [];
+        for (let i = 0; i < waterCount; i++) {
+          let t = Math.random();
+          waterPos[i * 3] = -20 + t * 18;
+          waterPos[i * 3 + 1] = 4 - t * 3;
+          waterPos[i * 3 + 2] = (Math.random() - 0.5) * 2;
+          waterVels.push({ speed: 0.035 + Math.random() * 0.01, progress: t });
+        }
+        waterGeo.setAttribute(
+          "position",
+          new THREE.BufferAttribute(waterPos, 3),
+        );
+        waterFlowParticles = new THREE.Points(
+          waterGeo,
+          new THREE.PointsMaterial({
+            color: 0x38bdf8,
+            size: 0.8,
+            transparent: true,
+            opacity: 0.85,
+          }),
+        );
+        waterFlowParticles.userData = { vels: waterVels };
+        scene.add(waterFlowParticles);
+
+        turbineGroup = new THREE.Group();
+
+        const hubMat = new THREE.MeshStandardMaterial({
+          color: 0x15803d,
+          metalness: 0.8,
+          roughness: 0.2,
+        });
+        const hubMesh = new THREE.Mesh(
+          new THREE.CylinderGeometry(1.2, 1.2, 0.6, 32),
+          hubMat,
+        );
+        turbineGroup.add(hubMesh);
+
+        const bladeCount = 10;
+        const bladeMat = new THREE.MeshStandardMaterial({
+          color: 0x22c55e,
+          metalness: 0.75,
+          roughness: 0.25,
+          side: THREE.DoubleSide,
+        });
+        for (let i = 0; i < bladeCount; i++) {
+          let angle = (i * Math.PI * 2) / bladeCount;
+          let bladeGeo = new THREE.BoxGeometry(2.4, 0.12, 0.8);
+          let bladeMesh = new THREE.Mesh(bladeGeo, bladeMat);
+          bladeMesh.position.set(
+            Math.cos(angle) * 1.2,
+            0,
+            Math.sin(angle) * 1.2,
+          );
+          bladeMesh.rotation.y = -angle;
+          turbineGroup.add(bladeMesh);
+        }
+
+        turbineGroup.position.set(-2, 1.5, 0);
+        turbineGroup.userData = { key: "turbine" };
+        scene.add(turbineGroup);
+        clickableObjects.push(turbineGroup);
+
+        // CONNECTING ELECTRIC POWER BUS WIRE SPANNING DIRECTLY FROM GENERATOR (-2, 11, 0) TO BATTERY STORAGE (11, 2.5, 0)
+        const wireMat = new THREE.MeshStandardMaterial({
+          color: 0xfacc15,
+          metalness: 0.8,
+          roughness: 0.2,
+        });
+        const startWirePos = new THREE.Vector3(-2, 11, 0);
+        const endWirePos = new THREE.Vector3(11, 3.5, 0);
+        const wireDistance = startWirePos.distanceTo(endWirePos);
+
+        const powerBusWire = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.1, 0.1, wireDistance, 8),
+          wireMat,
+        );
+        powerBusWire.position.copy(startWirePos).lerp(endWirePos, 0.5);
+        powerBusWire.quaternion.setFromUnitVectors(
+          new THREE.Vector3(0, 1, 0),
+          endWirePos.clone().sub(startWirePos).normalize(),
+        );
+        scene.add(powerBusWire);
+
+        const generatorGroup = new THREE.Group();
+        const shaftMat = new THREE.MeshStandardMaterial({
+          color: 0x94a3b8,
+          metalness: 0.9,
+          roughness: 0.1,
+        });
+        shaftMesh = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.5, 0.5, 14, 16),
+          shaftMat,
+        );
+        shaftMesh.position.set(-2, 8, 0);
+        generatorGroup.add(shaftMesh);
+
+        generatorRotor = new THREE.Mesh(
+          new THREE.CylinderGeometry(3.2, 3.2, 4.5, 24),
+          new THREE.MeshStandardMaterial({
+            color: 0xef4444,
+            metalness: 0.7,
+            roughness: 0.3,
+          }),
+        );
+        generatorRotor.position.set(-2, 11, 0);
+        generatorGroup.add(generatorRotor);
+
+        statorCoils = new THREE.Mesh(
+          new THREE.CylinderGeometry(4.2, 4.2, 4, 24, 1, true),
+          new THREE.MeshStandardMaterial({
+            color: 0xb45309,
+            metalness: 0.8,
+            roughness: 0.2,
+            wireframe: true,
+          }),
+        );
+        statorCoils.position.set(-2, 11, 0);
+        statorCoils.userData = { key: "generator" };
+        generatorGroup.add(statorCoils);
+        clickableObjects.push(statorCoils);
+
+        scene.add(generatorGroup);
+
+        const powerhouseBuildingGroup = new THREE.Group();
+        powerhouseExteriorMesh = new THREE.Mesh(
+          new THREE.BoxGeometry(20, 18, 28),
+          powerhouseWallMaterial,
+        );
+        powerhouseBuildingGroup.add(powerhouseExteriorMesh);
+        powerhouseBuildingGroup.position.set(3, 9, 0);
+        scene.add(powerhouseBuildingGroup);
+
+        // ELECTRIC FLOW PARTICLES: FLOWING CONTINUOUSLY ALONG THE WIRE VECTOR FROM GENERATOR TO BATTERY
+        const elecCount = 45;
+        const elecGeo = new THREE.BufferGeometry();
+        const elecPos = new Float32Array(elecCount * 3);
+        const elecVels = [];
+        for (let i = 0; i < elecCount; i++) {
+          let t = Math.random();
+          let currentPos = new THREE.Vector3().lerpVectors(
+            startWirePos,
+            endWirePos,
+            t,
+          );
+          elecPos[i * 3] = currentPos.x;
+          elecPos[i * 3 + 1] = currentPos.y;
+          elecPos[i * 3 + 2] = currentPos.z;
+          elecVels.push({ speed: 0.04 + Math.random() * 0.02, progress: t });
+        }
+        elecGeo.setAttribute("position", new THREE.BufferAttribute(elecPos, 3));
+        electricFlowParticles = new THREE.Points(
+          elecGeo,
+          new THREE.PointsMaterial({
+            color: 0xfacc15,
+            size: 0.85,
+            transparent: true,
+            opacity: 0.95,
+          }),
+        );
+        electricFlowParticles.userData = {
+          vels: elecVels,
+          start: startWirePos,
+          end: endWirePos,
+        };
+        scene.add(electricFlowParticles);
+
+        const batteryGroup = new THREE.Group();
+        for (let i = 0; i < 4; i++) {
+          const cabMesh = new THREE.Mesh(
+            new THREE.BoxGeometry(2.4, 5.0, 3.4),
+            new THREE.MeshStandardMaterial({
+              color: 0x1d4ed8,
+              metalness: 0.7,
+              emissive: 0x1e40af,
+              emissiveIntensity: 0.35,
+            }),
+          );
+          cabMesh.position.set(
+            11 + (i % 2) * 3.2,
+            2.5,
+            -4.5 + Math.floor(i / 2) * 5.5,
+          );
+          cabMesh.userData = { key: "battery" };
+          batteryGroup.add(cabMesh);
+          clickableObjects.push(cabMesh);
+        }
+        scene.add(batteryGroup);
+
+        const tailraceGroup = new THREE.Group();
+
+        const riverWater = new THREE.Mesh(
+          new THREE.BoxGeometry(45, 0.4, 16),
+          new THREE.MeshPhysicalMaterial({
+            color: 0x0ea5e9,
+            transparent: true,
+            opacity: 0.82,
+            roughness: 0.1,
+          }),
+        );
+        riverWater.position.set(18, -2.2, 0);
+        tailraceGroup.add(riverWater);
+
+        const bankMat = new THREE.MeshStandardMaterial({
+          color: 0x475569,
+          roughness: 0.9,
+          flatShading: true,
+        });
+        const leftBank = new THREE.Mesh(
+          new THREE.BoxGeometry(45, 3.5, 3),
+          bankMat,
+        );
+        leftBank.position.set(18, -0.6, 9.5);
+        tailraceGroup.add(leftBank);
+
+        const rightBank = new THREE.Mesh(
+          new THREE.BoxGeometry(45, 3.5, 3),
+          bankMat,
+        );
+        rightBank.position.set(18, -0.6, -9.5);
+        tailraceGroup.add(rightBank);
+
+        // Tailrace Water Particles (discharging from under turbine towards the right)
+        const tailCount = 60;
+        const tailGeo = new THREE.BufferGeometry();
+        const tailPos = new Float32Array(tailCount * 3);
+        const tailVels = [];
+        for (let i = 0; i < tailCount; i++) {
+          let t = Math.random();
+          tailPos[i * 3] = -2 + t * 40;
+          tailPos[i * 3 + 1] = -2.0;
+          tailPos[i * 3 + 2] = (Math.random() - 0.5) * 12;
+          tailVels.push({ speed: 0.04 + Math.random() * 0.02, progress: t });
+        }
+        tailGeo.setAttribute("position", new THREE.BufferAttribute(tailPos, 3));
+        tailraceFlowParticles = new THREE.Points(
+          tailGeo,
+          new THREE.PointsMaterial({
+            color: 0x7dd3fc,
+            size: 0.85,
+            transparent: true,
+            opacity: 0.9,
+          }),
+        );
+        tailraceFlowParticles.userData = { vels: tailVels };
+        scene.add(tailraceFlowParticles);
+
+        tailraceGroup.userData = { key: "tailrace" };
+        scene.add(tailraceGroup);
+        clickableObjects.push(tailraceGroup);
+      }
+
+      function animate() {
+        requestAnimationFrame(animate);
+
+        if (turbineGroup) turbineGroup.rotation.y += 0.03 * (turbineRPM / 300);
+        if (shaftMesh) shaftMesh.rotation.y += 0.03 * (turbineRPM / 300);
+        if (generatorRotor)
+          generatorRotor.rotation.y += 0.03 * (turbineRPM / 300);
+
+        // Water stream animation from reservoir
+        if (waterFlowParticles && showParticles) {
+          const pos = waterFlowParticles.geometry.attributes.position.array;
+          const vels = waterFlowParticles.userData.vels;
+          for (let i = 0; i < vels.length; i++) {
+            let v = vels[i];
+            v.progress += v.speed * (flowVelocity * 1.2);
+            if (v.progress > 1) v.progress = 0;
+            pos[i * 3] = -20 + v.progress * 18;
+            pos[i * 3 + 1] = 4 - v.progress * 3;
+          }
+          waterFlowParticles.geometry.attributes.position.needsUpdate = true;
+        }
+
+        // Electric flow animation smoothly traveling down the bus wire directly into the battery
+        if (electricFlowParticles && showParticles) {
+          const pos = electricFlowParticles.geometry.attributes.position.array;
+          const vels = electricFlowParticles.userData.vels;
+          const start = electricFlowParticles.userData.start;
+          const end = electricFlowParticles.userData.end;
+
+          for (let i = 0; i < vels.length; i++) {
+            let v = vels[i];
+            v.progress += v.speed * 0.9;
+            if (v.progress > 1) v.progress = 0;
+
+            let interpolated = new THREE.Vector3().lerpVectors(
+              start,
+              end,
+              v.progress,
+            );
+            pos[i * 3] = interpolated.x;
+            pos[i * 3 + 1] = interpolated.y;
+            pos[i * 3 + 2] = interpolated.z;
+          }
+          electricFlowParticles.geometry.attributes.position.needsUpdate = true;
+        }
+
+        // Tailrace water particle animation (flowing downstream)
+        if (tailraceFlowParticles && showParticles) {
+          const pos = tailraceFlowParticles.geometry.attributes.position.array;
+          const vels = tailraceFlowParticles.userData.vels;
+          for (let i = 0; i < tailraceFlowParticles.userData.vels.length; i++) {
+            let v = vels[i];
+            v.progress += v.speed * (flowVelocity * 1.1);
+            if (v.progress > 1) v.progress = 0;
+            pos[i * 3] = -2 + v.progress * 40;
+          }
+          tailraceFlowParticles.geometry.attributes.position.needsUpdate = true;
+        }
+
+        controls.update();
+        renderer.render(scene, camera);
+      }
+
+      function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      }
+    </script>
+  </body>
+</html>
